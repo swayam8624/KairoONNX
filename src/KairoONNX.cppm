@@ -2,6 +2,7 @@ module;
 
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -39,6 +40,29 @@ export namespace kairo::onnx
         LayerNormalization
     };
 
+    [[nodiscard]]
+    inline std::string OpKindName(OpKind op)
+    {
+        switch (op)
+        {
+        case OpKind::Add: return "Add";
+        case OpKind::Sub: return "Sub";
+        case OpKind::Mul: return "Mul";
+        case OpKind::Div: return "Div";
+        case OpKind::Gemm: return "Gemm";
+        case OpKind::MatMul: return "MatMul";
+        case OpKind::Relu: return "Relu";
+        case OpKind::Softmax: return "Softmax";
+        case OpKind::Conv: return "Conv";
+        case OpKind::MaxPool: return "MaxPool";
+        case OpKind::Flatten: return "Flatten";
+        case OpKind::Reshape: return "Reshape";
+        case OpKind::Transpose: return "Transpose";
+        case OpKind::LayerNormalization: return "LayerNormalization";
+        default: return "Unknown";
+        }
+    }
+
     struct TensorInfo final
     {
         std::string name;
@@ -67,6 +91,24 @@ export namespace kairo::onnx
         std::vector<TensorInfo> outputs;
         std::vector<TensorInfo> initializers;
         std::vector<Node> nodes;
+
+        [[nodiscard]]
+        const TensorInfo* FindTensor(const std::string& name) const noexcept
+        {
+            for (const TensorInfo& tensor : inputs)
+            {
+                if (tensor.name == name) return &tensor;
+            }
+            for (const TensorInfo& tensor : outputs)
+            {
+                if (tensor.name == name) return &tensor;
+            }
+            for (const TensorInfo& tensor : initializers)
+            {
+                if (tensor.name == name) return &tensor;
+            }
+            return nullptr;
+        }
     };
 
     struct ImportResult final
@@ -104,6 +146,51 @@ export namespace kairo::onnx
         default:
             return false;
         }
+    }
+
+    [[nodiscard]]
+    inline std::vector<std::string> ValidateGraph(const Graph& graph)
+    {
+        std::vector<std::string> diagnostics;
+        if (graph.inputs.empty())
+        {
+            diagnostics.push_back("Graph has no inputs.");
+        }
+        if (graph.outputs.empty())
+        {
+            diagnostics.push_back("Graph has no outputs.");
+        }
+        for (const Node& node : graph.nodes)
+        {
+            if (!IsSupportedInferenceOp(node.op))
+            {
+                diagnostics.push_back("Unsupported op: " + node.name + " (" + OpKindName(node.op) + ")");
+            }
+            if (node.outputs.empty())
+            {
+                diagnostics.push_back("Node has no outputs: " + node.name);
+            }
+        }
+        return diagnostics;
+    }
+
+    [[nodiscard]]
+    inline std::optional<TensorInfo> InferElementwiseOutput(
+        const Graph& graph,
+        const Node& node)
+    {
+        if (node.inputs.empty() || node.outputs.empty())
+        {
+            return std::nullopt;
+        }
+        const TensorInfo* input = graph.FindTensor(node.inputs[0]);
+        if (!input)
+        {
+            return std::nullopt;
+        }
+        TensorInfo out = *input;
+        out.name = node.outputs[0];
+        return out;
     }
 
     [[nodiscard]]
