@@ -15,3 +15,6 @@ target_sources(KairoONNX
 
 add_executable(KairoONNXSmoke tests/smoke.cpp)
 target_link_libraries(KairoONNXSmoke PRIVATE KairoONNX)
+
+enable_testing()
+add_test(NAME KairoONNXSmoke COMMAND KairoONNXSmoke)
