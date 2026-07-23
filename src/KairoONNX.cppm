@@ -70,6 +70,7 @@ export namespace kairo::onnx
         std::string name;
         ElementType elementType = ElementType::Float32;
         std::vector<std::int64_t> shape;
+        std::vector<std::byte> rawData;
     };
 
     struct Attribute final
@@ -291,9 +292,22 @@ export namespace kairo::onnx
             {
                 std::uint32_t field = 0, wire = 0;
                 if (!reader.ReadField(field, wire)) return false;
-                if (field == 1 && wire == 0) { std::uint64_t dim = 0; if (!reader.ReadVarint(dim)) return false; tensor.shape.push_back(static_cast<std::int64_t>(dim)); }
+                if (field == 1 && wire == 0) { std::uint64_t dim = 0; if (!reader.ReadVarint(dim) || dim > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max())) return false; tensor.shape.push_back(static_cast<std::int64_t>(dim)); }
+                else if (field == 1 && wire == 2)
+                {
+                    std::vector<std::byte> packed;
+                    if (!reader.ReadBytes(packed)) return false;
+                    Reader dimensions{ packed };
+                    while (dimensions.position < packed.size())
+                    {
+                        std::uint64_t dim = 0;
+                        if (!dimensions.ReadVarint(dim) || dim > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max())) return false;
+                        tensor.shape.push_back(static_cast<std::int64_t>(dim));
+                    }
+                }
                 else if (field == 2 && wire == 0) { std::uint64_t type = 0; if (!reader.ReadVarint(type)) return false; auto converted = elementTypeFromONNX(type); if (!converted) return false; tensor.elementType = *converted; }
                 else if (field == 8 && wire == 2) { std::vector<std::byte> name; if (!reader.ReadBytes(name)) return false; tensor.name = stringFromBytes(name); }
+                else if (field == 9 && wire == 2) { if (!reader.ReadBytes(tensor.rawData)) return false; }
                 else if (!reader.Skip(wire)) return false;
             }
             return !tensor.name.empty();
