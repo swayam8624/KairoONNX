@@ -31,11 +31,29 @@ KairoONNX defines a bounded import surface:
 - `ValidateGraph`: diagnostics before lowering.
 - `InferElementwiseOutput`: first shape-inference primitive.
 - `ImportModelBytes`: bounded protobuf-wire reader for `ModelProto`, graph
-  topology, node input/output/op metadata, and initializer identity, element
-  type, dimensions, and `raw_data` payload metadata,
+  topology, opset imports, typed value shapes (including symbolic dimensions),
+  node input/output/op metadata, scalar and packed attributes, and initializer
+  identity, element type, dimensions, and `raw_data` payload metadata,
   with explicit malformed-wire and unsupported-op diagnostics.
 - `Float32InitializerTensor`: converts validated little-endian Float32
   `raw_data` initializer payloads into owned `KairoMath::Tensor` values.
+- `Kairo.ONNX.Runtime`: validates topological value availability, materializes
+  Float32 and Int64 initializers, and executes native Kairo tensors.
+
+Runtime lowering currently covers:
+
+- NumPy-broadcast `Add`, `Sub`, `Mul`, and `Div`
+- rank-2/batched `MatMul` and `Gemm`
+- `Relu`, `Gelu`, `Sigmoid`, final-axis `Softmax`
+- NCHW/OIHW `Conv` with bias and 2D `MaxPool`
+- `Flatten`, `Reshape`, and arbitrary-rank `Transpose`
+- final-axis `LayerNormalization`
+- `Gather`, positive-step `Slice`, and `Concat`
+
+The conformance smoke suite executes representative MLP, CNN, pooling, and
+indexing graphs and compares exact expected outputs. Missing feeds,
+topologically unavailable values, duplicate producers, unsupported opsets, and
+incompatible shapes fail before graph outputs are returned.
 
 The first real parser should target a limited inference set:
 
@@ -62,10 +80,11 @@ ctest --test-dir build --output-on-failure
 ./build/KairoONNXSmoke
 ```
 
-## Roadmap
+## Remaining Conformance Work
 
-1. Convert remaining typed/non-Float32 initializer encodings into Kairo tensors.
-2. Parse node attributes and opset/version semantics.
-3. Implement shape inference for the first operator set.
-4. Lower graph into Kairo runtime IR.
-5. Validate imported outputs against fixtures.
+1. Convert typed TensorProto fields and Float16/BFloat16 initializers.
+2. Add grouped/dilated convolution and negative-step slicing.
+3. Add graph optimization passes: constant folding and dead-value elimination.
+4. Run exported ONNX fixture outputs against a trusted external runtime.
+5. Expand opset-specific semantic checks instead of using one bounded 7-21
+   compatibility range.

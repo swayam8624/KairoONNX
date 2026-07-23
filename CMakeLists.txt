@@ -13,7 +13,9 @@ target_sources(KairoONNX
     PUBLIC
         FILE_SET CXX_MODULES
         BASE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/src
-        FILES src/KairoONNX.cppm
+        FILES
+            src/KairoONNX.cppm
+            src/KairoONNXRuntime.cppm
 )
 target_link_libraries(KairoONNX PUBLIC KairoMath)
 

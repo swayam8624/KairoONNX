@@ -1,10 +1,43 @@
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
+#include <stdexcept>
+#include <string>
 #include <vector>
 
 import Kairo.ONNX;
+import Kairo.ONNX.Runtime;
 import Kairo.Foundation.Math.Tensor;
+
+namespace
+{
+    kairo::onnx::TensorInfo Initializer(
+        std::string name, std::vector<std::int64_t> shape, std::vector<float> values)
+    {
+        kairo::onnx::TensorInfo result{
+            .name = std::move(name),
+            .elementType = kairo::onnx::ElementType::Float32,
+            .shape = std::move(shape),
+            .rawData = std::vector<std::byte>(values.size() * sizeof(float))
+        };
+        std::memcpy(result.rawData.data(), values.data(), result.rawData.size());
+        return result;
+    }
+
+    kairo::onnx::TensorInfo IntInitializer(
+        std::string name, std::vector<std::int64_t> values)
+    {
+        kairo::onnx::TensorInfo result{
+            .name = std::move(name),
+            .elementType = kairo::onnx::ElementType::Int64,
+            .shape = { static_cast<std::int64_t>(values.size()) },
+            .rawData = std::vector<std::byte>(values.size() * sizeof(std::int64_t))
+        };
+        std::memcpy(result.rawData.data(), values.data(), result.rawData.size());
+        return result;
+    }
+}
 
 int main()
 {
@@ -33,6 +66,7 @@ int main()
         std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0x40},
         std::byte{0x00}, std::byte{0x00}, std::byte{0x40}, std::byte{0x40},
         std::byte{0x00}, std::byte{0x00}, std::byte{0x80}, std::byte{0x40},
+        std::byte{0x42}, std::byte{0x02}, std::byte{0x10}, std::byte{0x12},
     };
     const auto imported = kairo::onnx::ImportModelBytes(modelBytes);
     assert(imported.Success());
@@ -41,11 +75,123 @@ int main()
     assert(imported.graph.inputs[0].name == "x");
     assert(imported.graph.outputs[0].name == "y");
     assert(imported.graph.initializers.size() == 1);
+    assert(imported.graph.operatorSets.size() == 1);
+    assert(imported.graph.operatorSets[0].version == 18);
     assert(imported.graph.initializers[0].name == "w");
     assert((imported.graph.initializers[0].shape == std::vector<std::int64_t>{ 2, 2 }));
     assert(imported.graph.initializers[0].rawData.size() == 16);
     const auto weights = kairo::onnx::Float32InitializerTensor(imported.graph.initializers[0]);
     assert(weights.Dim(0) == 2 && weights.Dim(1) == 2);
     assert(weights(0, 0) == 1.0f && weights(1, 1) == 4.0f);
+
+    kairo::onnx::Graph mlp;
+    mlp.inputs.push_back({ .name = "features", .shape = { 2, 3 } });
+    mlp.outputs.push_back({ .name = "activated", .shape = { 2, 2 } });
+    mlp.initializers.push_back(Initializer("weight", { 3, 2 }, {
+        1, 0, 0, 1, 1, -1
+    }));
+    mlp.initializers.push_back(Initializer("bias", { 2 }, { 0.5f, -0.5f }));
+    mlp.nodes.push_back({
+        .name = "dense",
+        .op = kairo::onnx::OpKind::MatMul,
+        .inputs = { "features", "weight" },
+        .outputs = { "dense_out" }
+    });
+    mlp.nodes.push_back({
+        .name = "bias_add",
+        .op = kairo::onnx::OpKind::Add,
+        .inputs = { "dense_out", "bias" },
+        .outputs = { "biased" }
+    });
+    mlp.nodes.push_back({
+        .name = "activation",
+        .op = kairo::onnx::OpKind::Relu,
+        .inputs = { "biased" },
+        .outputs = { "activated" }
+    });
+    kairo::onnx::RuntimeBindings mlpFeeds;
+    mlpFeeds.emplace("features", kairo::foundation::math::Tensor<float>(
+        { 2, 3 }, { 1, 2, 3, -2, 1, 0.5f }));
+    const auto mlpResult = kairo::onnx::ExecuteGraph(mlp, mlpFeeds);
+    const auto& mlpOutput = std::get<kairo::foundation::math::Tensor<float>>(
+        mlpResult.outputs.at("activated"));
+    assert(mlpOutput(0, 0) == 4.5f && mlpOutput(0, 1) == 0.0f);
+    assert(mlpOutput(1, 0) == 0.0f && mlpOutput(1, 1) == 0.0f);
+
+    kairo::onnx::Graph cnn;
+    cnn.inputs.push_back({ .name = "image", .shape = { 1, 1, 3, 3 } });
+    cnn.outputs.push_back({ .name = "pooled", .shape = { 1, 1, 1, 1 } });
+    cnn.initializers.push_back(Initializer("kernel", { 1, 1, 2, 2 }, {
+        1, 0, 0, -1
+    }));
+    cnn.initializers.push_back(Initializer("conv_bias", { 1 }, { 0.25f }));
+    cnn.nodes.push_back({
+        .name = "conv",
+        .op = kairo::onnx::OpKind::Conv,
+        .inputs = { "image", "kernel", "conv_bias" },
+        .outputs = { "conv_out" },
+        .attributes = { { "strides", "1,1" }, { "pads", "0,0,0,0" } }
+    });
+    cnn.nodes.push_back({
+        .name = "pool",
+        .op = kairo::onnx::OpKind::MaxPool,
+        .inputs = { "conv_out" },
+        .outputs = { "pooled" },
+        .attributes = { { "kernel_shape", "2,2" }, { "strides", "2,2" } }
+    });
+    kairo::onnx::RuntimeBindings cnnFeeds;
+    cnnFeeds.emplace("image", kairo::foundation::math::Tensor<float>(
+        { 1, 1, 3, 3 }, { 1, 2, 3, 4, 5, 6, 7, 8, 9 }));
+    const auto cnnResult = kairo::onnx::ExecuteGraph(cnn, cnnFeeds);
+    const auto& cnnOutput = std::get<kairo::foundation::math::Tensor<float>>(
+        cnnResult.outputs.at("pooled"));
+    assert(cnnOutput.At({ 0, 0, 0, 0 }) == -3.75f);
+
+    kairo::onnx::Graph indexing;
+    indexing.inputs.push_back({ .name = "table", .shape = { 3, 2 } });
+    indexing.outputs.push_back({ .name = "joined", .shape = { 2, 2 } });
+    indexing.initializers.push_back(IntInitializer("indices", { 2, 0 }));
+    indexing.initializers.push_back(IntInitializer("starts", { 0 }));
+    indexing.initializers.push_back(IntInitializer("ends", { 1 }));
+    indexing.initializers.push_back(IntInitializer("axes", { 1 }));
+    indexing.nodes.push_back({
+        .name = "gather",
+        .op = kairo::onnx::OpKind::Gather,
+        .inputs = { "table", "indices" },
+        .outputs = { "selected" },
+        .attributes = { { "axis", "0" } }
+    });
+    indexing.nodes.push_back({
+        .name = "slice",
+        .op = kairo::onnx::OpKind::Slice,
+        .inputs = { "selected", "starts", "ends", "axes" },
+        .outputs = { "column" }
+    });
+    indexing.nodes.push_back({
+        .name = "concat",
+        .op = kairo::onnx::OpKind::Concat,
+        .inputs = { "column", "column" },
+        .outputs = { "joined" },
+        .attributes = { { "axis", "1" } }
+    });
+    kairo::onnx::RuntimeBindings indexingFeeds;
+    indexingFeeds.emplace("table", kairo::foundation::math::Tensor<float>(
+        { 3, 2 }, { 1, 2, 3, 4, 5, 6 }));
+    const auto indexingResult = kairo::onnx::ExecuteGraph(indexing, indexingFeeds);
+    const auto& joined = std::get<kairo::foundation::math::Tensor<float>>(
+        indexingResult.outputs.at("joined"));
+    assert(joined(0, 0) == 5.0f && joined(0, 1) == 5.0f);
+    assert(joined(1, 0) == 1.0f && joined(1, 1) == 1.0f);
+
+    bool missingRejected = false;
+    try
+    {
+        (void)kairo::onnx::ExecuteGraph(mlp, {});
+    }
+    catch (const std::invalid_argument&)
+    {
+        missingRejected = true;
+    }
+    assert(missingRejected);
     return 0;
 }
