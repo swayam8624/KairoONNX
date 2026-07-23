@@ -30,7 +30,9 @@ KairoONNX defines a bounded import surface:
 - `OpKind`: explicit supported operator enum.
 - `ValidateGraph`: diagnostics before lowering.
 - `InferElementwiseOutput`: first shape-inference primitive.
-- `ImportModelBytes`: parser entry point with explicit diagnostics.
+- `ImportModelBytes`: bounded protobuf-wire reader for `ModelProto`, graph
+  topology, node input/output/op metadata, and initializer identity metadata,
+  with explicit malformed-wire and unsupported-op diagnostics.
 
 The first real parser should target a limited inference set:
 
@@ -59,9 +61,8 @@ ctest --test-dir build --output-on-failure
 
 ## Roadmap
 
-1. Add protobuf reader or generated ONNX schema support.
-2. Parse graph/tensor metadata.
-3. Parse initializers into Kairo tensors.
-4. Implement shape inference for the first operator set.
-5. Lower graph into Kairo runtime IR.
-6. Validate imported outputs against fixtures.
+1. Decode packed dimensions and raw/typed initializer values into Kairo tensors.
+2. Parse node attributes and opset/version semantics.
+3. Implement shape inference for the first operator set.
+4. Lower graph into Kairo runtime IR.
+5. Validate imported outputs against fixtures.
