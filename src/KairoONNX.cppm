@@ -2,6 +2,8 @@ module;
 
 #include <cstddef>
 #include <cstdint>
+#include <bit>
+#include <cstring>
 #include <optional>
 #include <limits>
 #include <string>
@@ -11,8 +13,11 @@ module;
 
 export module Kairo.ONNX;
 
+import Kairo.Foundation.Math.Tensor;
+
 export namespace kairo::onnx
 {
+    using kairo::foundation::math::Tensor;
     enum class ElementType
     {
         Float32,
@@ -194,6 +199,40 @@ export namespace kairo::onnx
         TensorInfo out = *input;
         out.name = node.outputs[0];
         return out;
+    }
+
+    /// Converts a validated little-endian ONNX Float32 raw initializer into an
+    /// owned Kairo tensor. Typed-field TensorProto encodings and non-Float32
+    /// values are intentionally rejected until their conversion rules exist.
+    [[nodiscard]]
+    inline Tensor<float> Float32InitializerTensor(const TensorInfo& initializer)
+    {
+        if (initializer.elementType != ElementType::Float32)
+        {
+            throw std::invalid_argument("Float32InitializerTensor requires an ONNX Float32 initializer.");
+        }
+        if constexpr (std::endian::native != std::endian::little)
+        {
+            throw std::runtime_error("Float32 ONNX raw_data conversion requires a little-endian host.");
+        }
+        std::vector<std::size_t> shape;
+        std::size_t values = 1;
+        for (std::int64_t dimension : initializer.shape)
+        {
+            if (dimension <= 0 || static_cast<std::uint64_t>(dimension) > std::numeric_limits<std::size_t>::max() / values)
+            {
+                throw std::invalid_argument("ONNX initializer has an invalid or overflowing shape.");
+            }
+            values *= static_cast<std::size_t>(dimension);
+            shape.push_back(static_cast<std::size_t>(dimension));
+        }
+        if (shape.empty() || initializer.rawData.size() != values * sizeof(float))
+        {
+            throw std::invalid_argument("ONNX Float32 raw_data length does not match initializer shape.");
+        }
+        std::vector<float> data(values);
+        std::memcpy(data.data(), initializer.rawData.data(), initializer.rawData.size());
+        return Tensor<float>(std::move(shape), std::move(data));
     }
 
     [[nodiscard]]

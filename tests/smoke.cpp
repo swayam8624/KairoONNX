@@ -1,8 +1,10 @@
-import Kairo.ONNX;
-
 #include <cassert>
 #include <cstddef>
+#include <cstdint>
 #include <vector>
+
+import Kairo.ONNX;
+import Kairo.Foundation.Math.Tensor;
 
 int main()
 {
@@ -42,5 +44,8 @@ int main()
     assert(imported.graph.initializers[0].name == "w");
     assert((imported.graph.initializers[0].shape == std::vector<std::int64_t>{ 2, 2 }));
     assert(imported.graph.initializers[0].rawData.size() == 16);
+    const auto weights = kairo::onnx::Float32InitializerTensor(imported.graph.initializers[0]);
+    assert(weights.Dim(0) == 2 && weights.Dim(1) == 2);
+    assert(weights(0, 0) == 1.0f && weights(1, 1) == 4.0f);
     return 0;
 }

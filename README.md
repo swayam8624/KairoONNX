@@ -34,6 +34,8 @@ KairoONNX defines a bounded import surface:
   topology, node input/output/op metadata, and initializer identity, element
   type, dimensions, and `raw_data` payload metadata,
   with explicit malformed-wire and unsupported-op diagnostics.
+- `Float32InitializerTensor`: converts validated little-endian Float32
+  `raw_data` initializer payloads into owned `KairoMath::Tensor` values.
 
 The first real parser should target a limited inference set:
 
@@ -62,7 +64,7 @@ ctest --test-dir build --output-on-failure
 
 ## Roadmap
 
-1. Convert supported initializer payloads into Kairo tensors.
+1. Convert remaining typed/non-Float32 initializer encodings into Kairo tensors.
 2. Parse node attributes and opset/version semantics.
 3. Implement shape inference for the first operator set.
 4. Lower graph into Kairo runtime IR.
