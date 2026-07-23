@@ -1,4 +1,5 @@
 #include <cassert>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -26,6 +27,37 @@ namespace
         if (!stream.read(reinterpret_cast<char*>(bytes.data()), size))
             throw std::runtime_error("Cannot read ONNX conformance fixture.");
         return bytes;
+    }
+
+    void VerifyReference(
+        const std::filesystem::path& fixtures,
+        const std::string& name,
+        const std::string& inputName,
+        const std::string& outputName,
+        std::vector<std::size_t> inputShape,
+        std::size_t outputElements)
+    {
+        const auto imported = kairo::onnx::ImportModelBytes(
+            ReadBytes(fixtures / ("reference_" + name + ".onnx")));
+        assert(imported.Success());
+        const auto input =
+            ReadBytes(fixtures / ("reference_" + name + "_input.f32"));
+        const auto expected =
+            ReadBytes(fixtures / ("reference_" + name + "_output.f32"));
+        kairo::foundation::math::Tensor<float> inputTensor(std::move(inputShape));
+        assert(input.size() == inputTensor.Size() * sizeof(float));
+        assert(expected.size() == outputElements * sizeof(float));
+        std::memcpy(inputTensor.Data(), input.data(), input.size());
+        kairo::onnx::RuntimeBindings feeds;
+        feeds.emplace(inputName, std::move(inputTensor));
+        const auto result = kairo::onnx::ExecuteGraph(imported.graph, feeds);
+        const auto& actual =
+            std::get<kairo::foundation::math::Tensor<float>>(
+                result.outputs.at(outputName));
+        std::vector<float> expectedValues(outputElements);
+        std::memcpy(expectedValues.data(), expected.data(), expected.size());
+        for (std::size_t index = 0; index < outputElements; ++index)
+            assert(std::abs(actual[index] - expectedValues[index]) <= 1e-5f);
     }
 
     kairo::onnx::TensorInfo Initializer(
@@ -267,6 +299,10 @@ int main()
         expectedValues.data(), referenceExpected.data(), referenceExpected.size());
     for (std::size_t index = 0; index < expectedValues.size(); ++index)
         assert(std::abs(referenceActual[index] - expectedValues[index]) <= 1e-6f);
+    VerifyReference(
+        fixtures, "cnn", "image", "pooled", { 1, 1, 3, 3 }, 1);
+    VerifyReference(
+        fixtures, "transformer", "hidden", "attended", { 2, 4 }, 8);
 
     bool missingRejected = false;
     try
