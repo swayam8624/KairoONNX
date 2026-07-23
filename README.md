@@ -60,7 +60,8 @@ incompatible shapes fail before graph outputs are returned.
 
 Static inference currently covers elementwise broadcasting, activations,
 normalization, matrix products, flattening, transposition, NCHW convolution,
-and 2D max pooling. Inferred intermediates are retained in `Graph::valueInfo`,
+2D max pooling, initializer-driven reshape, gather, positive-step slice, and
+concat. Inferred intermediates are retained in `Graph::valueInfo`,
 including metadata imported from ONNX `value_info`. Symbolic dimensions remain
 `-1`; shape arithmetic that cannot be represented safely is rejected instead
 of guessed.
@@ -102,8 +103,8 @@ ctest --test-dir build --output-on-failure
 
 1. Convert typed TensorProto fields and Float16/BFloat16 initializers.
 2. Add grouped/dilated convolution and negative-step slicing.
-3. Extend static inference to data-driven `Reshape`, `Gather`, `Slice`, and
-   `Concat` shapes.
+3. Extend static inference to grouped/dilated convolution and negative-step
+   slicing.
 4. Extend trusted-runtime parity from the MLP fixture to CNN and transformer
    fixtures.
 5. Expand opset-specific semantic checks instead of using one bounded 7-21

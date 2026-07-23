@@ -97,6 +97,19 @@ export namespace kairo::onnx
             std::memcpy(info.rawData.data(), contiguous.Data(), info.rawData.size());
             return info;
         }
+
+        [[nodiscard]] inline std::vector<std::int64_t> Int64Values(
+            const TensorInfo& tensor)
+        {
+            if (tensor.elementType != ElementType::Int64
+                || tensor.rawData.size() % sizeof(std::int64_t) != 0)
+                throw std::invalid_argument(
+                    "Static shape input must be a valid Int64 initializer.");
+            std::vector<std::int64_t> values(
+                tensor.rawData.size() / sizeof(std::int64_t));
+            std::memcpy(values.data(), tensor.rawData.data(), tensor.rawData.size());
+            return values;
+        }
     }
 
     /// Propagates static dtype/shape metadata in graph order and records
@@ -185,6 +198,129 @@ export namespace kairo::onnx
                         after *= shape[index];
                 }
                 output.shape = { before, after };
+                break;
+            }
+            case OpKind::Reshape:
+            {
+                std::vector<std::int64_t> requested = Int64Values(input(1));
+                if (requested.empty())
+                    throw std::invalid_argument("Reshape shape cannot be empty.");
+                std::int64_t inferredAxis = -1;
+                std::int64_t knownProduct = 1;
+                std::int64_t inputProduct = 1;
+                for (std::int64_t dimension : input(0).shape)
+                {
+                    if (dimension < 0)
+                        throw std::invalid_argument(
+                            "Dynamic input product cannot infer Reshape.");
+                    inputProduct *= dimension;
+                }
+                for (std::size_t axis = 0; axis < requested.size(); ++axis)
+                {
+                    if (requested[axis] == 0)
+                    {
+                        if (axis >= input(0).shape.size())
+                            throw std::invalid_argument("Reshape zero axis is out of range.");
+                        requested[axis] = input(0).shape[axis];
+                    }
+                    if (requested[axis] == -1)
+                    {
+                        if (inferredAxis >= 0)
+                            throw std::invalid_argument("Reshape has multiple inferred axes.");
+                        inferredAxis = static_cast<std::int64_t>(axis);
+                    }
+                    else if (requested[axis] <= 0)
+                        throw std::invalid_argument("Reshape dimension is invalid.");
+                    else
+                        knownProduct *= requested[axis];
+                }
+                if (inferredAxis >= 0)
+                {
+                    if (knownProduct == 0 || inputProduct % knownProduct != 0)
+                        throw std::invalid_argument("Reshape product is incompatible.");
+                    requested[static_cast<std::size_t>(inferredAxis)] =
+                        inputProduct / knownProduct;
+                }
+                else if (knownProduct != inputProduct)
+                    throw std::invalid_argument("Reshape product is incompatible.");
+                output.shape = std::move(requested);
+                break;
+            }
+            case OpKind::Gather:
+            {
+                const auto& dataShape = input(0).shape;
+                const auto& indexShape = input(1).shape;
+                std::int64_t axis = Integer(node, "axis", 0);
+                if (axis < 0) axis += static_cast<std::int64_t>(dataShape.size());
+                if (axis < 0 || axis >= static_cast<std::int64_t>(dataShape.size()))
+                    throw std::invalid_argument("Gather axis is out of range.");
+                output.shape.insert(
+                    output.shape.end(), dataShape.begin(), dataShape.begin() + axis);
+                output.shape.insert(
+                    output.shape.end(), indexShape.begin(), indexShape.end());
+                output.shape.insert(
+                    output.shape.end(), dataShape.begin() + axis + 1, dataShape.end());
+                break;
+            }
+            case OpKind::Slice:
+            {
+                output.shape = input(0).shape;
+                const auto starts = Int64Values(input(1));
+                const auto ends = Int64Values(input(2));
+                const auto axes = node.inputs.size() > 3
+                    ? Int64Values(input(3))
+                    : std::vector<std::int64_t>{};
+                const auto steps = node.inputs.size() > 4
+                    ? Int64Values(input(4))
+                    : std::vector<std::int64_t>{};
+                if (starts.size() != ends.size()
+                    || (!axes.empty() && axes.size() != starts.size())
+                    || (!steps.empty() && steps.size() != starts.size()))
+                    throw std::invalid_argument("Slice static inputs have unequal lengths.");
+                for (std::size_t index = 0; index < starts.size(); ++index)
+                {
+                    std::int64_t axis = axes.empty()
+                        ? static_cast<std::int64_t>(index) : axes[index];
+                    if (axis < 0) axis += static_cast<std::int64_t>(output.shape.size());
+                    const std::int64_t step = steps.empty() ? 1 : steps[index];
+                    if (axis < 0 || axis >= static_cast<std::int64_t>(output.shape.size())
+                        || step <= 0 || output.shape[static_cast<std::size_t>(axis)] < 0)
+                        throw std::invalid_argument("Slice static axis/step is unsupported.");
+                    const std::int64_t dimension =
+                        output.shape[static_cast<std::size_t>(axis)];
+                    const std::int64_t begin = std::clamp(starts[index], -dimension, dimension);
+                    const std::int64_t end = std::clamp(ends[index], -dimension, dimension);
+                    const std::int64_t normalizedBegin =
+                        begin < 0 ? begin + dimension : begin;
+                    const std::int64_t normalizedEnd =
+                        end < 0 ? end + dimension : end;
+                    output.shape[static_cast<std::size_t>(axis)] =
+                        std::max<std::int64_t>(
+                            0, (normalizedEnd - normalizedBegin + step - 1) / step);
+                }
+                break;
+            }
+            case OpKind::Concat:
+            {
+                output.shape = input(0).shape;
+                std::int64_t axis = Integer(node, "axis", 0);
+                if (axis < 0) axis += static_cast<std::int64_t>(output.shape.size());
+                if (axis < 0 || axis >= static_cast<std::int64_t>(output.shape.size()))
+                    throw std::invalid_argument("Concat axis is out of range.");
+                std::int64_t extent = 0;
+                for (std::size_t index = 0; index < node.inputs.size(); ++index)
+                {
+                    const auto& shape = input(index).shape;
+                    if (shape.size() != output.shape.size())
+                        throw std::invalid_argument("Concat rank mismatch.");
+                    for (std::size_t dimension = 0; dimension < shape.size(); ++dimension)
+                        if (dimension != static_cast<std::size_t>(axis)
+                            && shape[dimension] != output.shape[dimension])
+                            throw std::invalid_argument("Concat non-axis shape mismatch.");
+                    if (shape[static_cast<std::size_t>(axis)] < 0) extent = -1;
+                    else if (extent >= 0) extent += shape[static_cast<std::size_t>(axis)];
+                }
+                output.shape[static_cast<std::size_t>(axis)] = extent;
                 break;
             }
             case OpKind::Transpose:

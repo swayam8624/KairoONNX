@@ -190,6 +190,8 @@ int main()
         .outputs = { "joined" },
         .attributes = { { "axis", "1" } }
     });
+    kairo::onnx::InferStaticShapes(indexing);
+    assert((indexing.outputs[0].shape == std::vector<std::int64_t>{ 2, 2 }));
     kairo::onnx::RuntimeBindings indexingFeeds;
     indexingFeeds.emplace("table", kairo::foundation::math::Tensor<float>(
         { 3, 2 }, { 1, 2, 3, 4, 5, 6 }));
