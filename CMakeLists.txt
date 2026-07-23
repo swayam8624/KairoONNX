@@ -16,6 +16,7 @@ target_sources(KairoONNX
         FILES
             src/KairoONNX.cppm
             src/KairoONNXRuntime.cppm
+            src/KairoONNXOptimize.cppm
 )
 target_link_libraries(KairoONNX PUBLIC KairoMath)
 

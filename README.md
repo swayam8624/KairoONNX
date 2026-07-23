@@ -39,6 +39,9 @@ KairoONNX defines a bounded import surface:
   `raw_data` initializer payloads into owned `KairoMath::Tensor` values.
 - `Kairo.ONNX.Runtime`: validates topological value availability, materializes
   Float32 and Int64 initializers, and executes native Kairo tensors.
+- `Kairo.ONNX.Optimize`: propagates static value metadata, folds constant
+  subgraphs through the native runtime, and removes values and nodes that
+  cannot contribute to a graph output.
 
 Runtime lowering currently covers:
 
@@ -55,14 +58,22 @@ indexing graphs and compares exact expected outputs. Missing feeds,
 topologically unavailable values, duplicate producers, unsupported opsets, and
 incompatible shapes fail before graph outputs are returned.
 
-The first real parser should target a limited inference set:
+Static inference currently covers elementwise broadcasting, activations,
+normalization, matrix products, flattening, transposition, NCHW convolution,
+and 2D max pooling. Inferred intermediates are retained in `Graph::valueInfo`,
+including metadata imported from ONNX `value_info`. Symbolic dimensions remain
+`-1`; shape arithmetic that cannot be represented safely is rejected instead
+of guessed.
 
-- `Gemm`, `MatMul`
-- `Add`, `Sub`, `Mul`, `Div`
-- `Relu`, `Softmax`
-- `Conv`, `MaxPool`
-- `Flatten`, `Reshape`, `Transpose`
-- `LayerNormalization`
+Optimization is deliberately semantics-first:
+
+1. `InferStaticShapes` validates and records graph-order output metadata.
+2. `ConstantFold` executes only nodes whose complete input set is constant.
+3. `EliminateDeadValues` walks backward from graph outputs and removes
+   unreachable nodes, initializers, and intermediate metadata.
+
+The optimizer smoke case proves that a constant branch is folded, a dead branch
+is removed, and the rewritten graph still produces the expected native output.
 
 ## Where It Connects
 
@@ -84,7 +95,8 @@ ctest --test-dir build --output-on-failure
 
 1. Convert typed TensorProto fields and Float16/BFloat16 initializers.
 2. Add grouped/dilated convolution and negative-step slicing.
-3. Add graph optimization passes: constant folding and dead-value elimination.
+3. Extend static inference to data-driven `Reshape`, `Gather`, `Slice`, and
+   `Concat` shapes.
 4. Run exported ONNX fixture outputs against a trusted external runtime.
 5. Expand opset-specific semantic checks instead of using one bounded 7-21
    compatibility range.

@@ -8,6 +8,7 @@
 
 import Kairo.ONNX;
 import Kairo.ONNX.Runtime;
+import Kairo.ONNX.Optimize;
 import Kairo.Foundation.Math.Tensor;
 
 namespace
@@ -182,6 +183,45 @@ int main()
         indexingResult.outputs.at("joined"));
     assert(joined(0, 0) == 5.0f && joined(0, 1) == 5.0f);
     assert(joined(1, 0) == 1.0f && joined(1, 1) == 1.0f);
+
+    kairo::onnx::Graph optimized;
+    optimized.inputs.push_back({ .name = "runtime_x", .shape = { 1, 2 } });
+    optimized.outputs.push_back({ .name = "runtime_y" });
+    optimized.initializers.push_back(Initializer("constant_a", { 1, 2 }, { 1, 2 }));
+    optimized.initializers.push_back(Initializer("constant_b", { 2 }, { 3, 4 }));
+    optimized.nodes.push_back({
+        .name = "fold_add",
+        .op = kairo::onnx::OpKind::Add,
+        .inputs = { "constant_a", "constant_b" },
+        .outputs = { "folded" }
+    });
+    optimized.nodes.push_back({
+        .name = "live_add",
+        .op = kairo::onnx::OpKind::Add,
+        .inputs = { "runtime_x", "folded" },
+        .outputs = { "runtime_y" }
+    });
+    optimized.nodes.push_back({
+        .name = "dead_relu",
+        .op = kairo::onnx::OpKind::Relu,
+        .inputs = { "constant_b" },
+        .outputs = { "unused" }
+    });
+    kairo::onnx::InferStaticShapes(optimized);
+    assert((optimized.outputs[0].shape == std::vector<std::int64_t>{ 1, 2 }));
+    assert(optimized.valueInfo.size() == 3);
+    kairo::onnx::ConstantFold(optimized);
+    assert(optimized.nodes.size() == 1);
+    kairo::onnx::EliminateDeadValues(optimized);
+    assert(optimized.nodes.size() == 1);
+    assert(optimized.initializers.size() == 1);
+    kairo::onnx::RuntimeBindings optimizedFeeds;
+    optimizedFeeds.emplace("runtime_x", kairo::foundation::math::Tensor<float>(
+        { 1, 2 }, { 10, 20 }));
+    const auto optimizedResult = kairo::onnx::ExecuteGraph(optimized, optimizedFeeds);
+    const auto& optimizedOutput = std::get<kairo::foundation::math::Tensor<float>>(
+        optimizedResult.outputs.at("runtime_y"));
+    assert(optimizedOutput(0, 0) == 14.0f && optimizedOutput(0, 1) == 26.0f);
 
     bool missingRejected = false;
     try

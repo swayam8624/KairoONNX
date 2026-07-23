@@ -115,6 +115,7 @@ export namespace kairo::onnx
         std::vector<TensorInfo> inputs;
         std::vector<TensorInfo> outputs;
         std::vector<TensorInfo> initializers;
+        std::vector<TensorInfo> valueInfo;
         std::vector<Node> nodes;
         std::vector<OperatorSet> operatorSets;
 
@@ -130,6 +131,10 @@ export namespace kairo::onnx
                 if (tensor.name == name) return &tensor;
             }
             for (const TensorInfo& tensor : initializers)
+            {
+                if (tensor.name == name) return &tensor;
+            }
+            for (const TensorInfo& tensor : valueInfo)
             {
                 if (tensor.name == name) return &tensor;
             }
@@ -648,14 +653,16 @@ export namespace kairo::onnx
             {
                 std::uint32_t field = 0, wire = 0;
                 if (!reader.ReadField(field, wire)) return false;
-                if ((field == 1 || field == 5 || field == 11 || field == 12) && wire == 2)
+                if ((field == 1 || field == 5 || field == 11 || field == 12 || field == 13)
+                    && wire == 2)
                 {
                     std::vector<std::byte> nested; if (!reader.ReadBytes(nested)) return false;
                     if (field == 1) { Node node; if (!parseNode(nested, node)) return false; result.graph.nodes.push_back(std::move(node)); }
                     else { TensorInfo tensor; const bool parsed = field == 5 ? parseTensor(nested, tensor) : parseValueInfo(nested, tensor); if (!parsed) return false;
                         if (field == 5) result.graph.initializers.push_back(std::move(tensor));
                         else if (field == 11) result.graph.inputs.push_back(std::move(tensor));
-                        else result.graph.outputs.push_back(std::move(tensor)); }
+                        else if (field == 12) result.graph.outputs.push_back(std::move(tensor));
+                        else result.graph.valueInfo.push_back(std::move(tensor)); }
                 }
                 else if (!reader.Skip(wire)) return false;
             }
