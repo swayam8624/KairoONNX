@@ -22,6 +22,9 @@ target_link_libraries(KairoONNX PUBLIC KairoMath)
 
 add_executable(KairoONNXSmoke tests/smoke.cpp)
 target_link_libraries(KairoONNXSmoke PRIVATE KairoONNX)
+target_compile_definitions(
+    KairoONNXSmoke PRIVATE KAIRO_ONNX_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
+)
 
 enable_testing()
 add_test(NAME KairoONNXSmoke COMMAND KairoONNXSmoke)
