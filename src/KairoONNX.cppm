@@ -7,6 +7,7 @@ module;
 #include <cstring>
 #include <optional>
 #include <limits>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <utility>
