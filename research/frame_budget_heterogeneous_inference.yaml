@@ -1,0 +1,13 @@
+schema: kairo.research-track.v1
+track: R7
+title: Frame-budget-aware heterogeneous inference
+state: hypothesis
+role: portable_model_workload_and_correctness_oracle
+problem: Device-routing claims need repeatable model graphs and numerically checked outputs rather than synthetic kernels alone.
+hypothesis: Deterministic ONNX fixtures can expose workload-dependent CPU/GPU crossover points while preserving a common correctness oracle.
+baselines: [cpu_reference, cpu_simd, gpu_only, static_threshold, offline_oracle]
+workloads: [reference_mlp, reference_cnn, reference_transformer]
+metrics: [latency_ms_p50, latency_ms_p95, maximum_absolute_error, transfer_bytes, deadline_miss_rate]
+ablations: [no_graph_optimization, no_residency_reuse]
+failure_cases: [unsupported_operator, dynamic_shape, cold_model, tiny_batch]
+falsification: Reject device-routing claims that do not reproduce on pinned ONNX fixtures or exceed numerical tolerances.
