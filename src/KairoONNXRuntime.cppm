@@ -1,3 +1,9 @@
+// SOURCE STUDY MAP:
+// Native ONNX graph evaluator. Receives a validated Graph and RuntimeBindings, uses KairoMath
+// Tensor<float>/Tensor<int64_t> storage, then produces ExecutionResult. The optimizer also calls it
+// for constant folding.
+// Source trail: docs/SOURCE_READING_ORDER.md.
+
 module;
 
 #include <algorithm>
