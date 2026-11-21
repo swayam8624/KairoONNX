@@ -1,3 +1,9 @@
+// TEACHING MAP — src/KairoONNXRuntime.cppm
+// Executes the validated subset of ONNX operators on Kairo tensors. Unsupported operators,
+// incompatible shapes or dtypes must fail clearly rather than silently producing assumed
+// parity with standard ONNX runtimes.
+// See READING_ORDER.md for entrypoints, API callers and test expectations.
+
 module;
 
 #include <algorithm>
