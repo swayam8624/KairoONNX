@@ -37,6 +37,8 @@ export namespace kairo::onnx
         RuntimeBindings values;
     };
 
+    /// Decode an Int64 initializer to owned index/shape values, rejecting
+    /// wrong dtype and malformed byte length before graph execution.
     [[nodiscard]] inline std::vector<std::int64_t> Int64InitializerValues(
         const TensorInfo& initializer)
     {
@@ -116,6 +118,8 @@ export namespace kairo::onnx
         // Teaching: calculate NumPy-style compatible dimensions before
         // elementwise tensor execution. A rank/axis mismatch must be rejected
         // before allocating an output with an incorrect shape.
+        /// Infer singleton-compatible elementwise dimensions; conflicting
+        /// non-singleton axes are graph errors, not implicit truncations.
         [[nodiscard]] inline std::vector<std::size_t> BroadcastShape(
             const Tensor<float>& lhs, const Tensor<float>& rhs)
         {
@@ -201,6 +205,8 @@ export namespace kairo::onnx
             return output;
         }
 
+        /// CPU convolution with NCHW input and OIHW weights. The current
+        /// implementation restricts unsupported grouping/dilation.
         [[nodiscard]] inline Tensor<float> ConvNCHW(
             const Tensor<float>& input,
             const Tensor<float>& weights,
