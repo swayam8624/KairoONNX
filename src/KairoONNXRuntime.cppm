@@ -113,6 +113,9 @@ export namespace kairo::onnx
             return static_cast<std::size_t>(axis);
         }
 
+        // Teaching: calculate NumPy-style compatible dimensions before
+        // elementwise tensor execution. A rank/axis mismatch must be rejected
+        // before allocating an output with an incorrect shape.
         [[nodiscard]] inline std::vector<std::size_t> BroadcastShape(
             const Tensor<float>& lhs, const Tensor<float>& rhs)
         {
@@ -385,6 +388,10 @@ export namespace kairo::onnx
     /// Executes a validated, topologically ordered ONNX graph using native
     /// KairoMath CPU reference kernels. All failures identify the offending
     /// graph contract before returning partial outputs.
+    // Teaching: evaluate a validated graph in value-dependency order.
+    // RuntimeBindings are named tensor values, not C++ references to ONNX
+    // serialized bytes. The result includes observable graph outputs and
+    // intermediate values; Optimize may invoke this on constant-only graphs.
     [[nodiscard]] inline ExecutionResult ExecuteGraph(
         const Graph& graph, const RuntimeBindings& feeds)
     {
