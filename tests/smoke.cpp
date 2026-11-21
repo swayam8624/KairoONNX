@@ -1,3 +1,9 @@
+// TEACHING MAP — tests/smoke.cpp
+// Validates bounded ONNX import, operator execution, shape errors, unsupported inputs and
+// reference outputs. Tests consume public module APIs and should match generated fixed
+// fixtures.
+// See READING_ORDER.md for entrypoints, API callers and test expectations.
+
 // CMake Release normally defines NDEBUG, which disables C assert(). These
 // executables are acceptance tests: failures must remain observable in CI.
 #if defined(NDEBUG)
