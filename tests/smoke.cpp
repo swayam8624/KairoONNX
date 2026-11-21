@@ -18,6 +18,7 @@
 #include <fstream>
 #include <stdexcept>
 #include <string>
+#include <variant> // std::get<T> for RuntimeValue's std::variant alternatives.
 #include <vector>
 
 import Kairo.ONNX;
