@@ -1,3 +1,9 @@
+// TEACHING MAP — src/KairoONNX.cppm
+// Defines bounded ONNX model import and the public graph/tensor contracts. A parser result
+// describes a graph, not necessarily an executable model: runtime operator support and
+// validation belong to KairoONNXRuntime.cppm.
+// See READING_ORDER.md for entrypoints, API callers and test expectations.
+
 module;
 
 #include <algorithm>
