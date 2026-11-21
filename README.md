@@ -110,3 +110,12 @@ ctest --test-dir build --output-on-failure
    production architectures.
 5. Expand opset-specific semantic checks instead of using one bounded 7-21
    compatibility range.
+
+
+## Source learning pathway
+
+See [the linked reading itinerary](docs/SOURCE_READING_ORDER.md) for function/API relationships, source ownership and verification paths.
+
+## License and learning
+
+Original contributions may be studied, modified and developed further under [LICENSE](LICENSE). External libraries, host SDKs and other third-party assets retain their own terms. See [STATUS.md](STATUS.md) for the verified feature boundary.
