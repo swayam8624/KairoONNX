@@ -1,3 +1,8 @@
+// SOURCE STUDY MAP:
+// Acceptance tests for parser, native runtime and optimizer. Reference ONNX/input/output fixture
+// comparisons must remain active in Release; this file deliberately undefines NDEBUG before assert.
+// Source trail: docs/SOURCE_READING_ORDER.md.
+
 // CMake Release normally defines NDEBUG, which disables C assert(). These
 // executables are acceptance tests: failures must remain observable in CI.
 #if defined(NDEBUG)
@@ -13,6 +18,7 @@
 #include <fstream>
 #include <stdexcept>
 #include <string>
+#include <variant> // std::get<T> for RuntimeValue's std::variant alternatives.
 #include <vector>
 
 import Kairo.ONNX;

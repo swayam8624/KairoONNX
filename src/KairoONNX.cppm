@@ -1,3 +1,9 @@
+// SOURCE STUDY MAP:
+// Import/graph schema and bounded protobuf-wire parser. Input bytes become named tensors, nodes,
+// initializer records and diagnostics; Runtime and Optimize consume the validated graph. ONNX format
+// breadth is not the supported operator subset.
+// Source trail: docs/SOURCE_READING_ORDER.md.
+
 module;
 
 #include <algorithm>
@@ -186,6 +192,11 @@ export namespace kairo::onnx
     }
 
     [[nodiscard]]
+    // Teaching: graph-level semantic validation happens *after* protobuf decode.
+    // Diagnostics here concern the declared node/value structure; the runtime
+    // still checks concrete input tensors and per-op execution constraints.
+    /// Validate graph contracts before native execution. Operator enum
+    /// presence does not guarantee all runtime implementations support it.
     inline std::vector<std::string> ValidateGraph(const Graph& graph)
     {
         std::vector<std::string> diagnostics;
@@ -254,6 +265,9 @@ export namespace kairo::onnx
     }
 
     [[nodiscard]]
+    // Teaching: infer the output metadata for elementwise broadcasting without
+    // running a kernel. This is useful to both import-time diagnostics and
+    // Optimize; dimensions and dtypes must still match the native operator.
     inline std::optional<TensorInfo> InferElementwiseOutput(
         const Graph& graph,
         const Node& node)
@@ -276,6 +290,11 @@ export namespace kairo::onnx
     /// owned Kairo tensor. Typed-field TensorProto encodings and non-Float32
     /// values are intentionally rejected until their conversion rules exist.
     [[nodiscard]]
+    // Teaching: convert the serialized initializer payload into an owned
+    // KairoMath Tensor<float>. The runtime should not hold borrowed references
+    // to the protobuf input buffer once the imported model is released.
+    /// Convert raw ONNX bytes only after validating dtype, tensor shape,
+    /// element count, and native little-endian layout.
     inline Tensor<float> Float32InitializerTensor(const TensorInfo& initializer)
     {
         if (initializer.elementType != ElementType::Float32)
@@ -307,6 +326,11 @@ export namespace kairo::onnx
     }
 
     [[nodiscard]]
+    // Teaching: the untrusted wire-format entry point. Parse field lengths
+    // and value metadata within bounds, report parse errors separately from
+    // ValidateGraph's semantic diagnostics, then hand the result to Runtime.
+    /// Bounded ModelProto wire import into graph records and diagnostics;
+    /// later Runtime/Optimize passes consume a typed graph, not raw bytes.
     inline ImportResult ImportModelBytes(const std::vector<std::byte>& bytes)
     {
         ImportResult result;

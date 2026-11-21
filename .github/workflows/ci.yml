@@ -43,8 +43,11 @@ jobs:
       - name: Install macOS toolchain
         if: matrix.platform == 'macos'
         shell: bash
+        # Avoid refreshing unrelated preinstalled taps: GitHub's macOS runner
+        # can restrict third-party tap Git fetches (HTTP 403).
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: "1"
         run: |
-          brew update
           brew install cmake ninja llvm
           echo "KAIRO_CXX=$(brew --prefix llvm)/bin/clang++" >> "$GITHUB_ENV"
 
