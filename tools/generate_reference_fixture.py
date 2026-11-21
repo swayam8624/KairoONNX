@@ -1,3 +1,9 @@
+# SOURCE STUDY MAP:
+# Fixture generation script for reference models and expected tensor outputs. Treat generated binary
+# fixtures as separate provenance from repository source and keep seeds, framework versions and
+# shapes reproducible.
+# Source trail: docs/SOURCE_READING_ORDER.md.
+
 """Generate the bounded MLP conformance fixture with a trusted ONNX Runtime output."""
 
 from pathlib import Path
