@@ -1,3 +1,4 @@
+// TEACHING MAP: ONNX import and graph contract mediates model metadata/initializers into bounded tensor operations. KairoGPU and transformers provide selected execution; unsupported operators cannot be silently treated as implemented.
 module;
 
 #include <algorithm>
