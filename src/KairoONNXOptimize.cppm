@@ -1,3 +1,8 @@
+// SOURCE STUDY MAP:
+// Graph optimization pass that propagates metadata, folds constant nodes through ExecuteGraph and
+// prunes unreachable values; preserves the externally visible output contract.
+// Source trail: docs/SOURCE_READING_ORDER.md.
+
 module;
 
 #include <algorithm>
