@@ -1,5 +1,7 @@
 # KairoONNX
 
+> **Source-study guide:** Learn parser, validated graph IR, ONNX Runtime evaluator and optimizer step by step in [docs/SOURCE_READING_ORDER.md](docs/SOURCE_READING_ORDER.md). Original code is proposed under the [MIT License](LICENSE); reference model binaries have separate provenance considerations in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
 KairoONNX is the model import and graph-IR package for the Kairo ML stack. Its
 job is to bring external models into Kairo deliberately, operator by operator,
 without turning the core runtime into an unbounded ONNX compatibility project.
