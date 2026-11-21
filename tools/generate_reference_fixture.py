@@ -1,3 +1,9 @@
+# TEACHING MAP — tools/generate_reference_fixture.py
+# Python fixture generator for independent ONNX/reference test cases consumed by C++ smoke
+# tests. Keep reference model versions, random seeds, shape metadata and numeric
+# tolerances reproducible.
+# See READING_ORDER.md for entrypoints, API callers and test expectations.
+
 """Generate the bounded MLP conformance fixture with a trusted ONNX Runtime output."""
 
 from pathlib import Path

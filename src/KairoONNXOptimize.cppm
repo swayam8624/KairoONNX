@@ -1,3 +1,9 @@
+// TEACHING MAP — src/KairoONNXOptimize.cppm
+// Applies graph-level transformations to imported ONNX IR. These must preserve tensor
+// shapes, evaluation semantics and supported dtype/operator restrictions; runtime
+// execution remains separate.
+// See READING_ORDER.md for entrypoints, API callers and test expectations.
+
 module;
 
 #include <algorithm>
