@@ -195,6 +195,8 @@ export namespace kairo::onnx
     // Teaching: graph-level semantic validation happens *after* protobuf decode.
     // Diagnostics here concern the declared node/value structure; the runtime
     // still checks concrete input tensors and per-op execution constraints.
+    /// Validate graph contracts before native execution. Operator enum
+    /// presence does not guarantee all runtime implementations support it.
     inline std::vector<std::string> ValidateGraph(const Graph& graph)
     {
         std::vector<std::string> diagnostics;
@@ -291,6 +293,8 @@ export namespace kairo::onnx
     // Teaching: convert the serialized initializer payload into an owned
     // KairoMath Tensor<float>. The runtime should not hold borrowed references
     // to the protobuf input buffer once the imported model is released.
+    /// Convert raw ONNX bytes only after validating dtype, tensor shape,
+    /// element count, and native little-endian layout.
     inline Tensor<float> Float32InitializerTensor(const TensorInfo& initializer)
     {
         if (initializer.elementType != ElementType::Float32)
@@ -325,6 +329,8 @@ export namespace kairo::onnx
     // Teaching: the untrusted wire-format entry point. Parse field lengths
     // and value metadata within bounds, report parse errors separately from
     // ValidateGraph's semantic diagnostics, then hand the result to Runtime.
+    /// Bounded ModelProto wire import into graph records and diagnostics;
+    /// later Runtime/Optimize passes consume a typed graph, not raw bytes.
     inline ImportResult ImportModelBytes(const std::vector<std::byte>& bytes)
     {
         ImportResult result;
