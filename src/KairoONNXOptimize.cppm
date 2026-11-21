@@ -120,6 +120,8 @@ export namespace kairo::onnx
     /// Propagates static dtype/shape metadata in graph order and records
     /// intermediate values in `Graph::valueInfo`. Symbolic dimensions remain
     /// -1. Unsupported dynamic shape arithmetic fails explicitly.
+    // Teaching: propagate shape/type facts without running the full model.
+    // Downstream Runtime still validates actual caller-provided dimensions.
     inline void InferStaticShapes(Graph& graph)
     {
         using namespace optimize_detail;
@@ -403,6 +405,9 @@ export namespace kairo::onnx
 
     /// Evaluates nodes whose complete inputs are initializers. Folded outputs
     /// become Float32 initializers and no longer execute at runtime.
+    // Teaching: replace nodes whose inputs are known initializers with
+    // equivalent computed initializers; call Runtime to avoid maintaining a
+    // second, numerically divergent implementation of the same operators.
     inline void ConstantFold(Graph& graph)
     {
         using namespace optimize_detail;
@@ -442,6 +447,8 @@ export namespace kairo::onnx
 
     /// Removes nodes and intermediate constants that cannot reach a declared
     /// graph output. Original topological order is preserved.
+    // Teaching: retain values reachable from graph outputs; remove obsolete
+    // nodes/initializers only when doing so preserves the named output API.
     inline void EliminateDeadValues(Graph& graph)
     {
         std::unordered_set<std::string> required;
