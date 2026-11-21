@@ -1,3 +1,9 @@
+// SOURCE STUDY MAP:
+// Import/graph schema and bounded protobuf-wire parser. Input bytes become named tensors, nodes,
+// initializer records and diagnostics; Runtime and Optimize consume the validated graph. ONNX format
+// breadth is not the supported operator subset.
+// Source trail: docs/SOURCE_READING_ORDER.md.
+
 module;
 
 #include <algorithm>
