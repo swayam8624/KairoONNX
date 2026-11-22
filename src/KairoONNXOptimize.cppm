@@ -34,6 +34,8 @@ export namespace kairo::onnx
 {
     namespace optimize_detail
     {
+        // Return a nonowning pointer to matching Node metadata, or nullptr.
+        // The optimizer consumes parsed attributes but does not reparse ONNX.
         [[nodiscard]] inline const Attribute* AttributeByName(
             const Node& node, std::string_view name) noexcept
         {
@@ -42,6 +44,8 @@ export namespace kairo::onnx
             return nullptr;
         }
 
+        // Interpret a parsed integer attribute for shape calculations. Keep
+        // fallback rules distinct from runtime's own operator validation.
         [[nodiscard]] inline std::int64_t Integer(
             const Node& node, std::string_view name, std::int64_t fallback)
         {
@@ -49,6 +53,8 @@ export namespace kairo::onnx
             return attribute ? std::stoll(attribute->value) : fallback;
         }
 
+        // Parse comma-separated dimension/axis attributes into a native
+        // vector. Reject malformed fields; the importer already owns strings.
         [[nodiscard]] inline std::vector<std::int64_t> Integers(
             const Node& node,
             std::string_view name,
@@ -69,6 +75,10 @@ export namespace kairo::onnx
             return result;
         }
 
+        // Infer a trailing-dimension broadcast shape, preserving -1 to
+        // denote symbolic dimensions where inference cannot prove a size.
+        // Static shapes are hypotheses for a future runtime, not a license to
+        // assume arbitrary dynamic inputs will satisfy the operator.
         [[nodiscard]] inline std::vector<std::int64_t> Broadcast(
             const std::vector<std::int64_t>& lhs,
             const std::vector<std::int64_t>& rhs)
@@ -91,6 +101,9 @@ export namespace kairo::onnx
             return output;
         }
 
+        // Convert a CPU Tensor<float> produced by constant folding into a
+        // named ONNX-style raw-data initializer with contiguous Float32 bytes.
+        // Ownership transfers to Graph::initializers when inserted.
         [[nodiscard]] inline TensorInfo FloatTensorInfo(
             std::string name, const Tensor<float>& tensor)
         {
@@ -107,6 +120,9 @@ export namespace kairo::onnx
             return info;
         }
 
+        // Read shape/indices constants from validated Int64 raw_data for
+        // static inference. This helper does not perform general ONNX dtype
+        // conversion or framework-independent endian translation.
         [[nodiscard]] inline std::vector<std::int64_t> Int64Values(
             const TensorInfo& tensor)
         {
@@ -126,6 +142,10 @@ export namespace kairo::onnx
     /// -1. Unsupported dynamic shape arithmetic fails explicitly.
     // Propagate only provable output shapes; incompatible dimensions
     // are errors rather than guesses that may hide a bad model.
+    // Pass 1: traverse graph in producer order, record provable dtype and
+    // output shapes into Graph::valueInfo, and refresh public graph outputs.
+    // -1 dimensions remain symbolic; invalid operator shape combinations
+    // throw, avoiding unsafe fabricated tensor sizes at execution time.
     inline void InferStaticShapes(Graph& graph)
     {
         using namespace optimize_detail;
@@ -412,6 +432,11 @@ export namespace kairo::onnx
     // Evaluate eligible static subgraphs using the bounded runtime.
     // Only replace a node after its output is representable in the
     // supported typed initializer format.
+    // Pass 2: replace nodes whose inputs are known initializers with constant
+    // output tensors. A small subgraph is evaluated by ExecuteGraph, so the
+    // folding code depends on the *same bounded CPU runtime* as normal
+    // inference. Only supported Float32 folded outputs are serialized.
+    // Compare optimized and original graph outputs to detect semantic drift.
     inline void ConstantFold(Graph& graph)
     {
         using namespace optimize_detail;
@@ -453,6 +478,10 @@ export namespace kairo::onnx
     /// graph output. Original topological order is preserved.
     // Work backwards from named graph outputs, retaining required
     // nodes/initializers. Do not optimize away external observations.
+    // Pass 3: walk backwards from declared public output names, retain nodes
+    // that produce required values, and mark their dependencies as required.
+    // Reverse the kept nodes back into topological order, then erase unused
+    // initializers and inferred metadata; external outputs remain roots.
     inline void EliminateDeadValues(Graph& graph)
     {
         std::unordered_set<std::string> required;
