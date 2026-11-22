@@ -1,3 +1,12 @@
+// TEACHING MODULE: Limited ONNX static shape inference, constant folding
+// and dead-value elimination. These transforms may only rewrite graph
+// nodes where supported operator semantics and dimensions are known.
+//
+// Broadcasting, reshape, transpose, MatMul, NCHW Conv and pooling
+// require explicit rank/dimension validation. Folding must preserve
+// model values (not only the inferred shape); dead-value removal must
+// retain all named graph outputs and dependencies. Compare optimized
+// results to unoptimized interpreter and independent reference fixtures.
 module;
 
 #include <algorithm>
@@ -115,6 +124,8 @@ export namespace kairo::onnx
     /// Propagates static dtype/shape metadata in graph order and records
     /// intermediate values in `Graph::valueInfo`. Symbolic dimensions remain
     /// -1. Unsupported dynamic shape arithmetic fails explicitly.
+    // Propagate only provable output shapes; incompatible dimensions
+    // are errors rather than guesses that may hide a bad model.
     inline void InferStaticShapes(Graph& graph)
     {
         using namespace optimize_detail;
@@ -398,6 +409,9 @@ export namespace kairo::onnx
 
     /// Evaluates nodes whose complete inputs are initializers. Folded outputs
     /// become Float32 initializers and no longer execute at runtime.
+    // Evaluate eligible static subgraphs using the bounded runtime.
+    // Only replace a node after its output is representable in the
+    // supported typed initializer format.
     inline void ConstantFold(Graph& graph)
     {
         using namespace optimize_detail;
@@ -437,6 +451,8 @@ export namespace kairo::onnx
 
     /// Removes nodes and intermediate constants that cannot reach a declared
     /// graph output. Original topological order is preserved.
+    // Work backwards from named graph outputs, retaining required
+    // nodes/initializers. Do not optimize away external observations.
     inline void EliminateDeadValues(Graph& graph)
     {
         std::unordered_set<std::string> required;
