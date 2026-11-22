@@ -47,6 +47,9 @@ export namespace kairo::onnx
         RuntimeBindings values;
     };
 
+    // Read typed Int64 initializer bytes into an owning vector; the caller
+    // must separately validate shape/element count and consider native
+    // endianness before claiming portable ONNX raw-data interpretation.
     [[nodiscard]] inline std::vector<std::int64_t> Int64InitializerValues(
         const TensorInfo& initializer)
     {
@@ -61,6 +64,8 @@ export namespace kairo::onnx
 
     namespace runtime_detail
     {
+        // Borrow a named attribute from Node; nullptr if missing. It follows
+        // the Node lifetime and must not survive graph mutation/destruction.
         [[nodiscard]] inline const Attribute* FindAttribute(
             const Node& node, std::string_view name) noexcept
         {
@@ -69,6 +74,8 @@ export namespace kairo::onnx
             return nullptr;
         }
 
+        // Parse one required-on-use integer attribute with a default when
+        // absent; reject trailing garbage rather than silently truncating.
         [[nodiscard]] inline std::int64_t IntAttribute(
             const Node& node, std::string_view name, std::int64_t fallback)
         {
@@ -93,6 +100,8 @@ export namespace kairo::onnx
             return value;
         }
 
+        // Convert the importer's comma-separated integer attribute values
+        // into a native vector. Malformed/empty list elements are errors.
         [[nodiscard]] inline std::vector<std::int64_t> IntListAttribute(
             const Node& node, std::string_view name, std::vector<std::int64_t> fallback)
         {
@@ -113,6 +122,8 @@ export namespace kairo::onnx
             return result;
         }
 
+        // Interpret negative ONNX axes relative to tensor rank; optionally
+        // permit the extra end insertion axis. Reject out-of-range requests.
         [[nodiscard]] inline std::size_t NormalizeAxis(
             std::int64_t axis, std::size_t rank, bool allowEnd = false)
         {
@@ -123,6 +134,9 @@ export namespace kairo::onnx
             return static_cast<std::size_t>(axis);
         }
 
+        // NumPy-style trailing-dimension broadcast: each aligned dimension
+        // must match or be one; the result dimension is their maximum.
+        // The parser's InferElementwiseOutput is narrower than this helper.
         [[nodiscard]] inline std::vector<std::size_t> BroadcastShape(
             const Tensor<float>& lhs, const Tensor<float>& rhs)
         {
@@ -142,6 +156,9 @@ export namespace kairo::onnx
         }
 
         template<typename Operation>
+        // Allocate the output shape and map each linear output index to both
+        // operands. Dimensions of size one reuse coordinate zero. This is a
+        // reference CPU tensor loop, not an automatically dispatched GPU op.
         [[nodiscard]] Tensor<float> BroadcastBinary(
             const Tensor<float>& lhs, const Tensor<float>& rhs, Operation operation)
         {
@@ -168,6 +185,9 @@ export namespace kairo::onnx
             return output;
         }
 
+        // Validate axis permutation and construct the permuted dense result.
+        // Default ONNX axis order is reversed; any repeated or missing axis
+        // is invalid, not an opportunity for a silent reshape.
         [[nodiscard]] inline Tensor<float> Transpose(
             const Tensor<float>& input, const std::vector<std::int64_t>& requested)
         {
@@ -208,6 +228,10 @@ export namespace kairo::onnx
             return output;
         }
 
+        // Narrow ONNX Conv path: NCHW input, OIHW weights, rank four, two-
+        // dimensional padding/strides, group one and dilation one. The nested
+        // CPU loops accumulate into new output storage: no implicit switch
+        // to KairoMath's differently laid-out NHWC helper or KairoGPU.
         [[nodiscard]] inline Tensor<float> ConvNCHW(
             const Tensor<float>& input,
             const Tensor<float>& weights,
@@ -251,6 +275,9 @@ export namespace kairo::onnx
             return output;
         }
 
+        // Rank-four, two-dimensional max pooling: validate positive kernel,
+        // strides and padding, then scan the in-range input neighborhood of
+        // each output. Padded out-of-range cells do not contribute values.
         [[nodiscard]] inline Tensor<float> MaxPoolNCHW(
             const Tensor<float>& input, const Node& node)
         {
@@ -296,6 +323,9 @@ export namespace kairo::onnx
             return output;
         }
 
+        // Expand the selected data axis by the full indices shape. Negative
+        // indices are normalized within that axis; any still-out-of-range
+        // index throws before a tensor element is accessed.
         [[nodiscard]] inline Tensor<float> Gather(
             const Tensor<float>& data,
             const Tensor<std::int64_t>& indices,
@@ -341,6 +371,9 @@ export namespace kairo::onnx
             return output;
         }
 
+        // Require all input tensors to match rank and nonconcat dimensions,
+        // compute sum along requested axis, and copy values with a cumulative
+        // axis offset. Inputs are borrowed pointers; result owns its data.
         [[nodiscard]] inline Tensor<float> Concat(
             const std::vector<const Tensor<float>*>& inputs, std::int64_t requestedAxis)
         {
@@ -398,6 +431,12 @@ export namespace kairo::onnx
     // Validate feeds, initializer overrides, and unique producers,
     // then evaluate the bounded operator set in dependency order.
     // Compare typed outputs against independently generated fixtures.
+    // End-to-end execution gate: rerun ValidateGraph, bind caller-provided
+    // Tensor<float>/Tensor<int64_t> feeds, disallow initializer shadowing,
+    // convert raw initializers, and evaluate nodes in topological order.
+    // The result owns the named intermediate/output map; a named value is
+    // not a raw pointer into the original model bytes. Errors throw before
+    // an apparently successful, partially populated ExecutionResult returns.
     [[nodiscard]] inline ExecutionResult ExecuteGraph(
         const Graph& graph, const RuntimeBindings& feeds)
     {
