@@ -1,4 +1,5 @@
 # Teaching source map — KairoONNX
+**Deep source walkthrough:** [ONNX import, graph validation and CPU execution](ONNX_MODEL_TO_TENSOR_EXECUTION.md).
 
 Bounded ONNX graph importer and runtime interoperability, not universal ONNX execution.
 
