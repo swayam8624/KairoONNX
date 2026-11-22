@@ -1,3 +1,17 @@
+// TEACHING MODULE: Execute the supported ONNX graph subset on CPU,
+// using Tensor<float> and Tensor<int64_t> in named RuntimeBindings.
+// The parser and ValidateGraph establish producer/input/initializer
+// contracts before executing nodes in order. Invalid ops, dtypes,
+// attributes or missing names are explicit failures.
+//
+// ONNX Conv uses NCHW input/OIHW weights with bounded 2D group=1,
+// dilation=1 support. This differs from KairoMath Tensor's NHWC helper
+// kernels and must not be silently conflated. Softmax currently supports
+// the final axis; a valid ONNX model outside these restrictions is not
+// automatically runnable here.
+//
+// Graph optimization and KairoGPU acceleration are separate layers:
+// no general native GPU ONNX execution follows from importing this module.
 module;
 
 #include <algorithm>
@@ -25,6 +39,8 @@ export namespace kairo::onnx
     using RuntimeValue = std::variant<Tensor<float>, Tensor<std::int64_t>>;
     using RuntimeBindings = std::unordered_map<std::string, RuntimeValue>;
 
+    // Own intermediate named values and model outputs for debugging/
+    // verification. These are CPU Tensor values, not GPU buffers.
     struct ExecutionResult final
     {
         RuntimeBindings outputs;
@@ -379,6 +395,9 @@ export namespace kairo::onnx
     /// Executes a validated, topologically ordered ONNX graph using native
     /// KairoMath CPU reference kernels. All failures identify the offending
     /// graph contract before returning partial outputs.
+    // Validate feeds, initializer overrides, and unique producers,
+    // then evaluate the bounded operator set in dependency order.
+    // Compare typed outputs against independently generated fixtures.
     [[nodiscard]] inline ExecutionResult ExecuteGraph(
         const Graph& graph, const RuntimeBindings& feeds)
     {
