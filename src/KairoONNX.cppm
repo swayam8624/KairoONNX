@@ -1,4 +1,19 @@
-// TEACHING MAP: ONNX import and graph contract mediates model metadata/initializers into bounded tensor operations. KairoGPU and transformers provide selected execution; unsupported operators cannot be silently treated as implemented.
+// TEACHING MAP: ONNX import is a bounded Protobuf-wire reader and
+// validated operator graph, not a universal ONNX Runtime replacement.
+//
+// ImportModelBytes parses a subset of ModelProto/GraphProto/TensorProto
+// into named initializers, inputs, outputs, operators and attributes.
+// ValidateGraph checks ordering, value producers, supported operators
+// and metadata before the Kairo.ONNX.Runtime interpreter touches Tensor
+// storage. Float32InitializerTensor checks shape/raw_data byte lengths
+// and explicitly requires little-endian hosts for raw-byte conversion.
+//
+// ONNX graphs use framework tensor conventions (e.g., Conv NCHW/OIHW),
+// which differ from KairoMath Tensor's NHWC helper kernels. Runtime must
+// convert layout or implement the correct indexing; no silent transpose.
+// Operators/opsets and dtype support are deliberately bounded, and a
+// successfully parsed model is not proof its computation is supported.
+// See KairoONNXOptimize.cppm, KairoONNXRuntime.cppm, tests/smoke.cpp.
 module;
 
 #include <algorithm>
@@ -187,6 +202,9 @@ export namespace kairo::onnx
     }
 
     [[nodiscard]]
+    // Validate producer-consumer names and supported graph structure.
+    // A parsed byte stream is not an executable model until all
+    // mandatory graph and op/dtype conditions are checked.
     inline std::vector<std::string> ValidateGraph(const Graph& graph)
     {
         std::vector<std::string> diagnostics;
@@ -308,6 +326,9 @@ export namespace kairo::onnx
     }
 
     [[nodiscard]]
+    // Parse untrusted protobuf-wire bytes with bounded lengths and
+    // field types, then validate graph-level semantics. Never assume
+    // decoding implies inference support for an arbitrary opset.
     inline ImportResult ImportModelBytes(const std::vector<std::byte>& bytes)
     {
         ImportResult result;
