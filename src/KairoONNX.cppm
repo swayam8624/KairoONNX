@@ -205,6 +205,11 @@ export namespace kairo::onnx
     // Validate producer-consumer names and supported graph structure.
     // A parsed byte stream is not an executable model until all
     // mandatory graph and op/dtype conditions are checked.
+    // Read the producer registry in graph order: graph inputs and initializers
+    // become known values; each node can consume only already-known names and
+    // must introduce unique outputs. This validates graph topology and an
+    // opset/operator subset, not all numeric attribute/rank constraints.
+    // Kairo.ONNX.Runtime::ExecuteGraph rechecks this before allocating values.
     inline std::vector<std::string> ValidateGraph(const Graph& graph)
     {
         std::vector<std::string> diagnostics;
@@ -273,6 +278,10 @@ export namespace kairo::onnx
     }
 
     [[nodiscard]]
+    // Narrow metadata propagation: copies the FIRST input's descriptor while
+    // changing its name. It does not calculate a general NumPy broadcasted
+    // result shape: use the optimizer's Broadcast implementation when those
+    // semantics matter. Returns nullopt on absent names/inputs/outputs.
     inline std::optional<TensorInfo> InferElementwiseOutput(
         const Graph& graph,
         const Node& node)
@@ -295,6 +304,10 @@ export namespace kairo::onnx
     /// owned Kairo tensor. Typed-field TensorProto encodings and non-Float32
     /// values are intentionally rejected until their conversion rules exist.
     [[nodiscard]]
+    // Convert ONNX TensorProto raw_data into an OWNING KairoMath Float32
+    // Tensor. Validate little-endian host, positive dimensions and exact
+    // raw byte length first; memcpy after checks prevents treating a bad
+    // tensor payload as valid native float storage.
     inline Tensor<float> Float32InitializerTensor(const TensorInfo& initializer)
     {
         if (initializer.elementType != ElementType::Float32)
@@ -329,6 +342,10 @@ export namespace kairo::onnx
     // Parse untrusted protobuf-wire bytes with bounded lengths and
     // field types, then validate graph-level semantics. Never assume
     // decoding implies inference support for an arbitrary opset.
+    // Untrusted import boundary: bounded Reader decodes protobuf wire fields
+    // into typed Graph/TensorInfo/Node data, then validates declared producer
+    // and operator structure. ImportResult.diagnostics is the public failure
+    // route: parsing success is not equivalent to runtime compatibility.
     inline ImportResult ImportModelBytes(const std::vector<std::byte>& bytes)
     {
         ImportResult result;
@@ -342,6 +359,9 @@ export namespace kairo::onnx
             const std::vector<std::byte>& bytes;
             std::size_t position = 0;
 
+            // A protobuf varint carries seven payload bits per byte. Bail
+            // out on truncated/overlong sequences instead of reading beyond
+            // the caller-owned byte vector; does not retain a raw pointer.
             [[nodiscard]] bool ReadVarint(std::uint64_t& value)
             {
                 value = 0;
@@ -355,6 +375,8 @@ export namespace kairo::onnx
                 return false;
             }
 
+            // Split protobuf tag into field number and wire type. Subsequent
+            // parse lambdas must check both field ID and expected wire type.
             [[nodiscard]] bool ReadField(std::uint32_t& field, std::uint32_t& wire)
             {
                 std::uint64_t tag = 0;
@@ -372,6 +394,9 @@ export namespace kairo::onnx
                 return true;
             }
 
+            // Length-delimited field: first decode size, then verify it fits
+            // remaining bytes before copying into an owned vector. A hostile
+            // length must not trigger out-of-bounds reads or unchecked casts.
             [[nodiscard]] bool ReadBytes(std::vector<std::byte>& out)
             {
                 std::uint64_t size = 0;
@@ -382,6 +407,9 @@ export namespace kairo::onnx
                 return true;
             }
 
+            // Preserve protobuf forward-compatibility for the supported wire
+            // kinds. Unknown/unsupported wire types fail explicitly rather
+            // than silently advancing an inconsistent input cursor.
             [[nodiscard]] bool Skip(std::uint32_t wire)
             {
                 switch (wire)
@@ -399,6 +427,9 @@ export namespace kairo::onnx
         {
             return std::string(reinterpret_cast<const char*>(value.data()), value.size());
         };
+        // ONNX external type IDs are converted into this runtime's narrower
+        // ElementType enum. Recognition here does not automatically imply
+        // Kairo.ONNX.Runtime has a kernel for that dtype/operator combination.
         const auto elementTypeFromONNX = [](std::uint64_t value) -> std::optional<ElementType>
         {
             switch (value)
@@ -412,6 +443,9 @@ export namespace kairo::onnx
             default: return std::nullopt;
             }
         };
+        // Translate symbolic ONNX operator names to bounded OpKind values.
+        // Unknown names remain explicit and ValidateGraph rejects unsupported
+        // inference operators before graph execution.
         const auto opFromName = [](std::string_view name)
         {
             if (name == "Add") return OpKind::Add; if (name == "Sub") return OpKind::Sub;
@@ -428,6 +462,9 @@ export namespace kairo::onnx
             return OpKind::Unknown;
         };
 
+        // Decode TensorProto dimensions, dtype, name and raw_data without
+        // converting numeric bytes yet. Float32InitializerTensor later checks
+        // exact size/shape and constructs an owned Tensor<float>.
         const auto parseTensor = [&](const std::vector<std::byte>& message, TensorInfo& tensor) -> bool
         {
             Reader reader{ message };
