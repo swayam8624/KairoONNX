@@ -1,4 +1,5 @@
 # KairoONNX
+**Deep source walkthrough:** [ONNX import, graph validation and CPU execution](docs/ONNX_MODEL_TO_TENSOR_EXECUTION.md).
 
 KairoONNX is the model import and graph-IR package for the Kairo ML stack. Its
 job is to bring external models into Kairo deliberately, operator by operator,
