@@ -13,6 +13,8 @@
 #include <fstream>
 #include <stdexcept>
 #include <string>
+#include <utility>
+#include <variant>
 #include <vector>
 
 import Kairo.ONNX;
